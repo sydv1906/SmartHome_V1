@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: smarthome_mongodb
+    restart: always
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: smarthome_mqtt_broker
+    restart: always
+    ports:
+      - '1883:1883'
+      - '9001:9001'
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: smarthome_backend
+    restart: always
+    ports:
+      - '5000:5000'
+    environment:
+      - PORT=5000
+      - MONGO_URI=mongodb://mongodb:27017/smarthome_db
+      - MQTT_BROKER_URL=mqtt://mosquitto:1883
+      - JWT_SECRET=smarthome_super_secret_jwt_key_2026_production
+      - SOCKET_CORS_ORIGIN=*
+    depends_on:
+      - mongodb
+      - mosquitto
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: smarthome_frontend
+    restart: always
+    ports:
+      - '3000:3000'
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5000/api
+      - NEXT_PUBLIC_SOCKET_URL=http://localhost:5000
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:
