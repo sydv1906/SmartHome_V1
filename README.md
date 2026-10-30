@@ -79,6 +79,14 @@ Visit **`http://localhost:3000`** in your browser to view the live dashboard!
 | **Owner** | `owner@smarthome.ai` | `password123` |
 | **Admin** | `admin@smarthome.ai` | `password123` |
 
+## AI Assistant Configuration
+
+The dashboard assistant is available from the top navigation on desktop and mobile. It supports home/device status questions and explicit relay on/off requests. Voice input uses the browser's speech-recognition support when available; typed requests remain available in every browser.
+
+Configure the backend provider in `backend/.env` using `OPENAI_API_KEY`. `OPENAI_BASE_URL` and `OPENAI_MODEL` can override the default OpenAI-compatible endpoint and model. Keep the key on the backend and out of frontend environment variables. Assistant requests send device names, room names, relay/online state, and current power readings to that provider; do not enable it if that data sharing is not acceptable.
+
+Relay responses distinguish between an MQTT command being sent and a device confirming its state. The current device protocol does not provide a command acknowledgement, so the assistant does not claim physical confirmation.
+
 ---
 
 ## 📚 OpenAPI / Swagger API Documentation

@@ -214,7 +214,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Voice Control Button */}
         <button
           onClick={onOpenVoice}
-          className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/10 dark:bg-gradient-to-r dark:from-blue-600/30 dark:to-cyan-500/30 hover:bg-cyan-500/20 border border-cyan-500/40 text-cyan-600 dark:text-cyan-300 text-xs font-medium transition-all shadow-glowCyan"
+          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/10 dark:bg-gradient-to-r dark:from-blue-600/30 dark:to-cyan-500/30 hover:bg-cyan-500/20 border border-cyan-500/40 text-cyan-600 dark:text-cyan-300 text-xs font-medium transition-all shadow-glowCyan"
         >
           <Mic className="w-3.5 h-3.5 text-cyan-500 dark:text-neonCyan animate-bounce" />
           <span className="hidden sm:inline">Voice Assistant</span>

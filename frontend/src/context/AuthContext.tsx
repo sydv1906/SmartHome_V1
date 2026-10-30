@@ -83,9 +83,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setActiveHomeId(DEMO_OWNER.activeHomeId!);
           }
         } catch (_) {
-          // If backend offline but token exists, restore demo session
-          setUser(DEMO_OWNER);
-          setActiveHomeId(DEMO_OWNER.activeHomeId!);
+          localStorage.removeItem('sh_access_token');
+          localStorage.removeItem('sh_refresh_token');
+          setUser(null);
+          setActiveHomeId(null);
         }
       }
       setLoading(false);
