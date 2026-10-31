@@ -85,6 +85,7 @@ export interface IDevice {
     heartbeat: string;
   };
   powerRatingW: number;
+  meterConnected?: boolean;
   currentA: number;
   voltageV: number;
   powerW: number;

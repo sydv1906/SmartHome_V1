@@ -26,7 +26,7 @@ export const getDevices = async (req: AuthRequest, res: Response): Promise<void>
 
 export const createDevice = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { name, type, roomId, esp32Id, relayNumber, powerRatingW } = req.body;
+    const { name, type, roomId, esp32Id, relayNumber, powerRatingW, meterConnected } = req.body;
     const homeId = req.body.homeId || req.user.activeHomeId;
 
     if (!name || !type || !roomId || !esp32Id) {
@@ -45,6 +45,7 @@ export const createDevice = async (req: AuthRequest, res: Response): Promise<voi
       relayNumber: relayNumber || 1,
       mqttTopics: topics,
       powerRatingW: powerRatingW || 100,
+      meterConnected: meterConnected !== false,
       currentA: 0,
       voltageV: 230,
       powerW: 0,
@@ -81,8 +82,13 @@ export const toggleRelay = async (req: AuthRequest, res: Response): Promise<void
 
     const targetState = state !== undefined ? Boolean(state) : !device.relayState;
     device.relayState = targetState;
-    device.powerW = targetState ? device.powerRatingW * 0.85 : 0;
-    device.currentA = targetState ? device.powerW / (device.voltageV * device.powerFactor) : 0;
+    if (device.meterConnected) {
+      device.powerW = targetState ? device.powerRatingW * 0.85 : 0;
+      device.currentA = targetState ? device.powerW / (device.voltageV * device.powerFactor) : 0;
+    } else {
+      device.powerW = 0;
+      device.currentA = 0;
+    }
     device.lastSeen = new Date();
     await device.save();
 

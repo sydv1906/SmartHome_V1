@@ -56,6 +56,15 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }));
     });
 
+    newSocket.on('device_status_change', (data: any) => {
+      if (typeof data.relayState !== 'boolean') return;
+
+      setLatestRelayStates((prev) => ({
+        ...prev,
+        [data.deviceId]: data.relayState,
+      }));
+    });
+
     newSocket.on('alert_triggered', (data: any) => {
       setAlerts((prev) => [data, ...prev.slice(0, 19)]);
     });

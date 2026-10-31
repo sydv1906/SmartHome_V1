@@ -38,6 +38,31 @@ A commercial-grade, full-stack Smart Home Energy Management & Automation Platfor
 
 ## 🚀 Quick Start Guide
 
+### ESP32 firmware and PZEM-004T
+
+Open `firmware/esp32_smart_meter/esp32_smart_meter.ino` in the Arduino IDE, install the **PZEM-004T-v30** library, and select your ESP32 board. The firmware reads the meter over `Serial2` and publishes voltage, current, power, energy, power factor, and frequency in the existing MQTT telemetry message. If the meter cannot be read, it reports `pzemConnected: false`.
+
+| PZEM module | ESP32 |
+|---|---|
+| TX | GPIO 16 (RX2) |
+| RX | GPIO 17 (TX2) |
+| 5V | VIN / shared regulated 5V rail |
+| GND | GND / shared ground |
+
+Use the GPIO numbers shown above (often labeled D16 and D17 on the board). Power the PZEM and relay module from an adequately rated 5V supply with a common ground. The PZEM measures hazardous AC mains: use an isolated, correctly rated module and enclosure, and do not handle mains wiring while powered.
+
+The sketch includes `secrets.h` for Wi-Fi and MQTT settings. Keep that file local and do not publish its credentials.
+
+### Windows demo startup
+
+On the presentation laptop, connect to the ESP32's phone hotspot, then run this from PowerShell in the repository:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-demo.ps1
+```
+
+Approve the administrator prompt. The helper checks the hotspot, updates the local firmware broker IP and hotspot-scoped MQTT firewall rule, tests Atlas and authenticated MQTT, then opens backend and frontend terminals. Check the backend terminal for successful MongoDB and MQTT connections before opening `http://localhost:3000`. Atlas must allow the laptop's current public IP; the helper reports a failure but does not widen the Atlas IP access list. If the helper warns that the broker IP changed, upload the firmware to the ESP32 again before expecting it to connect. Keep the laptop on the hotspot and the backend, frontend, Mosquitto service, and ESP32 powered on during the presentation.
+
 ### 1. Prerequisites
 - Node.js v20+ & npm 10+
 - MongoDB (Local or MongoDB Atlas URI)
@@ -83,7 +108,7 @@ Visit **`http://localhost:3000`** in your browser to view the live dashboard!
 
 The dashboard assistant is available from the top navigation on desktop and mobile. It supports home/device status questions and explicit relay on/off requests. Voice input uses the browser's speech-recognition support when available; typed requests remain available in every browser.
 
-Configure the backend provider in `backend/.env` using `OPENAI_API_KEY`. `OPENAI_BASE_URL` and `OPENAI_MODEL` can override the default OpenAI-compatible endpoint and model. Keep the key on the backend and out of frontend environment variables. Assistant requests send device names, room names, relay/online state, and current power readings to that provider; do not enable it if that data sharing is not acceptable.
+Configure the chatbot in `backend/.env` using an OpenRouter API key from [openrouter.ai/keys](https://openrouter.ai/keys) as `OPENROUTER_API_KEY`. The default endpoint is `https://openrouter.ai/api/v1`, and the default model is `openai/gpt-4o-mini`; set `OPENROUTER_BASE_URL` or `OPENROUTER_MODEL` to override them. The selected model/provider must support structured outputs. Keep the key on the backend and out of frontend environment variables. OpenRouter account credits and rate limits apply. Assistant requests send device names, room names, relay/online state, and current power readings to that provider; do not enable it if that data sharing is not acceptable.
 
 Relay responses distinguish between an MQTT command being sent and a device confirming its state. The current device protocol does not provide a command acknowledgement, so the assistant does not claim physical confirmation.
 

@@ -38,13 +38,13 @@ export const interpretAssistantRequest = async (
   history: AssistantTurn[],
   devices: AssistantDeviceContext[]
 ): Promise<AssistantIntent> => {
-  const apiKey = process.env.OPENAI_API_KEY || process.env.AI_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
-    throw new Error('AI assistant is not configured. Set OPENAI_API_KEY on the backend.');
+    throw new Error('AI assistant is not configured. Set OPENROUTER_API_KEY in the backend environment.');
   }
 
-  const baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const baseUrl = (process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
+  const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
   const systemPrompt = [
     'You are the conversational assistant for this SmartHome dashboard.',
     'Return only the requested JSON object. Use kind="relay" only for an explicit request to switch one device on or off.',
@@ -62,6 +62,8 @@ export const interpretAssistantRequest = async (
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
+      'HTTP-Referer': 'http://localhost:3000',
+      'X-OpenRouter-Title': 'SmartHome AI',
     },
     signal: AbortSignal.timeout(20_000),
     body: JSON.stringify({
@@ -77,6 +79,7 @@ export const interpretAssistantRequest = async (
         type: 'json_schema',
         json_schema: { name: 'smarthome_assistant_intent', strict: true, schema: assistantSchema },
       },
+      provider: { require_parameters: true },
     }),
   });
 

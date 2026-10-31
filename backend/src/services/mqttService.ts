@@ -86,59 +86,83 @@ export const publishRelayCommand = (userId: string, deviceId: string, relayNumbe
 
 async function handleTelemetryMessage(deviceIdStr: string, payload: any) {
   try {
-    const device = await Device.findOne({ $or: [{ _id: deviceIdStr }, { esp32Id: deviceIdStr }] });
-    if (!device) return;
-
-    // Update live device fields
-    device.voltageV = payload.voltageV ?? payload.v ?? device.voltageV;
-    device.currentA = payload.currentA ?? payload.i ?? device.currentA;
-    device.powerW = payload.powerW ?? payload.p ?? (device.voltageV * device.currentA * (payload.powerFactor || 0.98));
-    device.energyKWh = payload.energyKWh ?? payload.e ?? (device.energyKWh + device.powerW / 3600000);
-    device.powerFactor = payload.powerFactor ?? device.powerFactor;
-    device.frequencyHz = payload.frequencyHz ?? device.frequencyHz;
-    device.relayState = payload.relayState !== undefined ? Boolean(payload.relayState) : device.relayState;
-    if (payload.temperatureC !== undefined) device.temperatureC = payload.temperatureC;
-    device.lastSeen = new Date();
-    device.onlineStatus = true;
-    await device.save();
-
-    // Store Telemetry record
-    await Telemetry.create({
-      deviceId: device._id,
-      esp32Id: device.esp32Id,
-      voltageV: device.voltageV,
-      currentA: device.currentA,
-      powerW: device.powerW,
-      energyKWh: device.energyKWh,
-      powerFactor: device.powerFactor,
-      frequencyHz: device.frequencyHz,
-      relayState: device.relayState,
-      temperatureC: device.temperatureC,
-      timestamp: new Date(),
-    });
-
-    // Broadcast via Socket.IO
-    try {
-      const io = getIO();
-      io.to(`home_${device.homeId}`).emit('telemetry_update', {
-        deviceId: device._id,
-        esp32Id: device.esp32Id,
-        voltageV: device.voltageV,
-        currentA: device.currentA,
-        powerW: device.powerW,
-        energyKWh: device.energyKWh,
-        powerFactor: device.powerFactor,
-        frequencyHz: device.frequencyHz,
-        relayState: device.relayState,
-        temperatureC: device.temperatureC,
-        lastSeen: device.lastSeen,
-      });
-    } catch (sErr) {
-      // socket io not yet ready
+    let devices = await Device.find({ esp32Id: deviceIdStr });
+    if (devices.length === 0) {
+      const device = await Device.findById(deviceIdStr);
+      if (!device) return;
+      devices = [device];
     }
 
-    // Check Smart Automations (High Voltage, Overcurrent, Runtime limits)
-    await checkAutomationRules(device);
+    const meterConnected = payload.pzemConnected !== false;
+    for (const device of devices) {
+      device.meterConnected = meterConnected;
+      const relayState = payload[`relay${device.relayNumber}`];
+      if (typeof relayState === 'boolean') {
+        device.relayState = relayState;
+      } else if (typeof relayState === 'string') {
+        const normalizedState = relayState.toLowerCase();
+        if (normalizedState === 'on' || normalizedState === 'true') device.relayState = true;
+        if (normalizedState === 'off' || normalizedState === 'false') device.relayState = false;
+      } else if (device.relayNumber === 1 && payload.relayState !== undefined) {
+        device.relayState = Boolean(payload.relayState);
+      }
+
+      if (meterConnected) {
+        device.voltageV = payload.voltageV ?? payload.v ?? device.voltageV;
+        device.currentA = payload.currentA ?? payload.i ?? device.currentA;
+        device.powerW = payload.powerW ?? payload.p ?? (device.voltageV * device.currentA * (payload.powerFactor || 0.98));
+        device.energyKWh = payload.energyKWh ?? payload.e ?? (device.energyKWh + device.powerW / 3600000);
+        device.powerFactor = payload.powerFactor ?? device.powerFactor;
+        device.frequencyHz = payload.frequencyHz ?? device.frequencyHz;
+        if (payload.temperatureC !== undefined) device.temperatureC = payload.temperatureC;
+      } else {
+        device.voltageV = 0;
+        device.currentA = 0;
+        device.powerW = 0;
+        device.energyKWh = 0;
+      }
+
+      device.lastSeen = new Date();
+      device.onlineStatus = true;
+      await device.save();
+
+      if (meterConnected) {
+        await Telemetry.create({
+          deviceId: device._id,
+          esp32Id: device.esp32Id,
+          voltageV: device.voltageV,
+          currentA: device.currentA,
+          powerW: device.powerW,
+          energyKWh: device.energyKWh,
+          powerFactor: device.powerFactor,
+          frequencyHz: device.frequencyHz,
+          relayState: device.relayState,
+          temperatureC: device.temperatureC,
+          timestamp: new Date(),
+        });
+
+        await checkAutomationRules(device);
+      }
+
+      try {
+        getIO().to(`home_${device.homeId}`).emit('telemetry_update', {
+          deviceId: device._id,
+          esp32Id: device.esp32Id,
+          meterConnected: device.meterConnected,
+          voltageV: device.voltageV,
+          currentA: device.currentA,
+          powerW: device.powerW,
+          energyKWh: device.energyKWh,
+          powerFactor: device.powerFactor,
+          frequencyHz: device.frequencyHz,
+          relayState: device.relayState,
+          temperatureC: device.temperatureC,
+          lastSeen: device.lastSeen,
+        });
+      } catch (sErr) {
+        // socket io not yet ready
+      }
+    }
   } catch (err) {
     console.error(`[MQTT Telemetry Error]`, err);
   }
@@ -146,25 +170,46 @@ async function handleTelemetryMessage(deviceIdStr: string, payload: any) {
 
 async function handleStatusMessage(deviceIdStr: string, payload: any) {
   try {
-    const device = await Device.findOne({ $or: [{ _id: deviceIdStr }, { esp32Id: deviceIdStr }] });
-    if (!device) return;
+    let devices = await Device.find({ esp32Id: deviceIdStr });
+    if (devices.length === 0) {
+      const device = await Device.findById(deviceIdStr);
+      if (!device) return;
+      devices = [device];
+    }
 
-    if (payload.rssi) device.signalStrengthRssi = payload.rssi;
-    if (payload.wifi) device.wifiSsid = payload.wifi;
-    if (payload.firmwareVersion) device.firmwareVersion = payload.firmwareVersion;
-    device.onlineStatus = payload.status === 'online' || payload.status === true;
-    device.lastSeen = new Date();
-    await device.save();
+    for (const device of devices) {
+      if (payload.rssi !== undefined) device.signalStrengthRssi = payload.rssi;
+      if (payload.wifi) device.wifiSsid = payload.wifi;
+      if (payload.firmwareVersion) device.firmwareVersion = payload.firmwareVersion;
+      if (payload.status !== undefined) {
+        device.onlineStatus = payload.status === 'online' || payload.status === true;
+      }
 
-    try {
-      const io = getIO();
-      io.to(`home_${device.homeId}`).emit('device_status_change', {
-        deviceId: device._id,
-        onlineStatus: device.onlineStatus,
-        rssi: device.signalStrengthRssi,
-        wifiSsid: device.wifiSsid,
-      });
-    } catch (_) {}
+      const relayState = payload[`relay${device.relayNumber}`];
+      if (typeof relayState === 'boolean') {
+        device.relayState = relayState;
+      } else if (typeof relayState === 'string') {
+        const normalizedState = relayState.toLowerCase();
+        if (normalizedState === 'on' || normalizedState === 'true') {
+          device.relayState = true;
+        } else if (normalizedState === 'off' || normalizedState === 'false') {
+          device.relayState = false;
+        }
+      }
+
+      device.lastSeen = new Date();
+      await device.save();
+
+      try {
+        getIO().to(`home_${device.homeId}`).emit('device_status_change', {
+          deviceId: device._id,
+          onlineStatus: device.onlineStatus,
+          relayState: device.relayState,
+          rssi: device.signalStrengthRssi,
+          wifiSsid: device.wifiSsid,
+        });
+      } catch (_) {}
+    }
   } catch (err) {
     console.error(`[MQTT Status Error]`, err);
   }

@@ -95,6 +95,7 @@ export default function DashboardPage() {
             voltageV: telem?.voltageV ?? dev.voltageV,
             currentA: telem?.currentA ?? dev.currentA,
             energyKWh: telem?.energyKWh ?? dev.energyKWh,
+            meterConnected: telem?.meterConnected ?? dev.meterConnected,
           };
         })
       );

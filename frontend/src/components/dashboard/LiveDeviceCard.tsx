@@ -60,6 +60,14 @@ export const LiveDeviceCard: React.FC<LiveDeviceCardProps> = ({
   const [toggling, setToggling] = useState<boolean>(false);
   const DeviceIcon = iconMap[device.type] || Zap;
   const roomName = (device.roomId as any)?.name || 'Living Room';
+  const displayedAsOn = device.type === 'Socket' ? !device.relayState : device.relayState;
+  const hasMeterReadings = device.meterConnected !== false;
+  const formatValue = (value: number, fractionDigits: number) =>
+    Number(value || 0).toLocaleString(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: fractionDigits,
+    });
+  const unavailable = '—';
 
   const handleToggle = async () => {
     setToggling(true);
@@ -74,7 +82,7 @@ export const LiveDeviceCard: React.FC<LiveDeviceCardProps> = ({
       whileHover={{ y: -3 }}
       transition={{ duration: 0.2 }}
       className={`relative glass-panel p-4 rounded-2xl border transition-all duration-300 ${
-        device.relayState
+        displayedAsOn
           ? 'border-cyan-500/50 shadow-glowCyan bg-gradient-to-b from-gray-900/90 via-darkCard to-blue-950/30'
           : 'border-gray-800/80 hover:border-gray-700 bg-darkCard/80'
       }`}
@@ -84,7 +92,7 @@ export const LiveDeviceCard: React.FC<LiveDeviceCardProps> = ({
         <div className="flex items-center space-x-3">
           <div
             className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all ${
-              device.relayState
+              displayedAsOn
                 ? 'bg-cyan-500/20 text-neonCyan border border-cyan-500/40 shadow-glowCyan animate-pulseFast'
                 : 'bg-gray-800/60 text-gray-400 border border-gray-700'
             }`}
@@ -115,39 +123,48 @@ export const LiveDeviceCard: React.FC<LiveDeviceCardProps> = ({
           onClick={handleToggle}
           disabled={toggling}
           className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 ${
-            device.relayState
+            displayedAsOn
               ? 'bg-gradient-to-tr from-cyan-500 to-blue-600 text-white shadow-glowCyan scale-105'
               : 'bg-gray-800 hover:bg-gray-700 text-gray-400 border border-gray-700'
           }`}
-          title={device.relayState ? 'Turn Relay OFF' : 'Turn Relay ON'}
+          title={displayedAsOn ? 'Turn Socket OFF' : 'Turn Socket ON'}
         >
           <Power className={`w-5 h-5 ${toggling ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
       {/* Telemetry Metrics Grid */}
-      <div className="grid grid-cols-4 gap-2 mt-4 p-2.5 rounded-xl bg-gray-950/60 border border-gray-800/80 text-center">
-        <div>
+      <div className="grid grid-cols-4 gap-1 sm:gap-2 mt-4 p-2.5 rounded-xl bg-gray-950/60 border border-gray-800/80 text-center">
+        <div className="min-w-0">
           <span className="text-[9px] font-medium text-gray-400 block uppercase">Power</span>
-          <span className={`text-xs font-bold ${device.relayState ? 'text-neonCyan' : 'text-gray-400'}`}>
-            {device.relayState ? `${device.powerW}W` : '0W'}
+          <span className={`block truncate whitespace-nowrap text-[11px] sm:text-xs font-bold ${device.relayState ? 'text-neonCyan' : 'text-gray-400'}`}>
+            {hasMeterReadings ? `${formatValue(device.powerW, 0)}W` : unavailable}
           </span>
         </div>
-        <div>
+        <div className="min-w-0">
           <span className="text-[9px] font-medium text-gray-400 block uppercase">Voltage</span>
-          <span className="text-xs font-bold text-blue-300">{device.voltageV}V</span>
-        </div>
-        <div>
-          <span className="text-[9px] font-medium text-gray-400 block uppercase">Current</span>
-          <span className="text-xs font-bold text-indigo-300">
-            {device.relayState ? `${device.currentA}A` : '0A'}
+          <span className="block truncate whitespace-nowrap text-[11px] sm:text-xs font-bold text-blue-300">
+            {hasMeterReadings ? `${formatValue(device.voltageV, 1)}V` : unavailable}
           </span>
         </div>
-        <div>
+        <div className="min-w-0">
+          <span className="text-[9px] font-medium text-gray-400 block uppercase">Current</span>
+          <span className="block truncate whitespace-nowrap text-[11px] sm:text-xs font-bold text-indigo-300">
+            {hasMeterReadings ? `${formatValue(device.currentA, 2)}A` : unavailable}
+          </span>
+        </div>
+        <div className="min-w-0">
           <span className="text-[9px] font-medium text-gray-400 block uppercase">Energy</span>
-          <span className="text-xs font-bold text-emerald-300">{device.energyKWh}kWh</span>
+          <span className="block truncate whitespace-nowrap text-[11px] sm:text-xs font-bold text-emerald-300">
+            {hasMeterReadings ? `${formatValue(device.energyKWh, 2)}kWh` : unavailable}
+          </span>
         </div>
       </div>
+      {!hasMeterReadings && (
+        <p className="mt-2 text-center text-[10px] text-amber-300">
+          Power meter not connected — readings unavailable
+        </p>
+      )}
 
       {/* Extra Info: Temp & Signal RSSI */}
       <div className="flex items-center justify-between text-[10px] text-gray-400 mt-3 pt-2.5 border-t border-gray-800/60">

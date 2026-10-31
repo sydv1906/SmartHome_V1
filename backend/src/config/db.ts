@@ -10,7 +10,8 @@ export const connectDB = async (): Promise<void> => {
     });
     console.log(`[Database] Successfully connected to MongoDB at ${mongoUri.split('@').pop()}`);
   } catch (error) {
-    console.warn(`[Database Warning] Could not connect to primary MongoDB at ${mongoUri}. Retrying with local fallback or in-memory mode...`);
+    const safeMongoUri = mongoUri.replace(/(mongodb(?:\+srv)?:\/\/)[^@/]+@/i, '$1[redacted]@');
+    console.warn(`[Database Warning] Could not connect to primary MongoDB at ${safeMongoUri}. Retrying with local fallback or in-memory mode...`);
     try {
       await mongoose.connect('mongodb://127.0.0.1:27017/smarthome_db', {
         serverSelectionTimeoutMS: 3000,

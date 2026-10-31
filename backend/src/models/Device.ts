@@ -28,6 +28,7 @@ export interface IDeviceDocument extends Document {
     heartbeat: string;
   };
   powerRatingW: number;
+  meterConnected: boolean;
   currentA: number;
   voltageV: number;
   powerW: number;
@@ -79,6 +80,7 @@ const DeviceSchema = new Schema<IDeviceDocument>(
       heartbeat: { type: String, required: true },
     },
     powerRatingW: { type: Number, default: 100 },
+    meterConnected: { type: Boolean, default: true },
     currentA: { type: Number, default: 0 },
     voltageV: { type: Number, default: 230 },
     powerW: { type: Number, default: 0 },
