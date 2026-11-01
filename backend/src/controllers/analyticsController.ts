@@ -43,14 +43,12 @@ export const getEnergyAnalytics = async (req: AuthRequest, res: Response): Promi
       const powerW = Math.round(item.powerSum / count);
       const voltageV = Number((item.voltageSum / count || 230).toFixed(1));
       const energyKWh = Number((item.energySum / count).toFixed(2));
-      const cost = Number((energyKWh * 0.15).toFixed(2));
 
       return {
         hour: `${h.toString().padStart(2, '0')}:00`,
         powerW,
         energyKWh,
         voltageV,
-        cost,
       };
     });
 
@@ -64,7 +62,6 @@ export const getEnergyAnalytics = async (req: AuthRequest, res: Response): Promi
       return {
         day,
         energyKWh,
-        cost: Number((energyKWh * 0.15).toFixed(2)),
         peakW: Math.round(devices.reduce((sum, d) => sum + (d.relayState ? d.powerW : 0), 0)),
       };
     });
@@ -93,7 +90,6 @@ export const getEnergyAnalytics = async (req: AuthRequest, res: Response): Promi
         type: d.type,
         energyKWh: Number(d.energyKWh.toFixed(2)),
         powerW: d.powerW,
-        cost: Number((d.energyKWh * 0.15).toFixed(2)),
       }))
       .sort((a, b) => b.energyKWh - a.energyKWh)
       .slice(0, 10);
@@ -101,7 +97,6 @@ export const getEnergyAnalytics = async (req: AuthRequest, res: Response): Promi
     // Idle consumption calculation from actual device power ratings
     const idleConsumptionW = Math.round(devices.reduce((acc, d) => acc + (d.relayState ? 0 : d.powerRatingW * 0.05), 0));
     const estimatedWastageKWh = Number(((idleConsumptionW * 24 * 30) / 1000).toFixed(2));
-    const estimatedWastageCost = Number((estimatedWastageKWh * 0.15).toFixed(2));
 
     res.status(200).json({
       success: true,
@@ -113,10 +108,9 @@ export const getEnergyAnalytics = async (req: AuthRequest, res: Response): Promi
         topDevices,
         summary: {
           totalKWh: Number(dailyData.reduce((a, b) => a + b.energyKWh, 0).toFixed(2)),
-          totalCost: Number(dailyData.reduce((a, b) => a + b.cost, 0).toFixed(2)),
+          deviceCount: devices.length,
           idleConsumptionW,
           estimatedWastageKWh,
-          estimatedWastageCost,
           peakUsageTime: '18:00 - 21:00',
           avgPowerFactor: 0.98,
           carbonEmissionsKg: Number((totalRoomEnergy * 0.85).toFixed(2)),
@@ -133,11 +127,10 @@ export const exportAnalyticsCSV = async (req: AuthRequest, res: Response): Promi
     const homeId = req.query.homeId || req.user?.activeHomeId;
     const devices = await Device.find(homeId ? { homeId } : {}).populate('roomId', 'name');
 
-    let csvContent = 'Device Name,Room,Type,Status,Power (W),Voltage (V),Current (A),Total Energy (kWh),Cost ($)\n';
+    let csvContent = 'Device Name,Room,Type,Status,Power (W),Voltage (V),Current (A),Total Energy (kWh)\n';
     devices.forEach((d: any) => {
       const roomName = d.roomId?.name || 'Unassigned';
-      const cost = (d.energyKWh * 0.15).toFixed(2);
-      csvContent += `"${d.name}","${roomName}","${d.type}","${d.relayState ? 'ON' : 'OFF'}",${d.powerW},${d.voltageV},${d.currentA},${d.energyKWh},${cost}\n`;
+      csvContent += `"${d.name}","${roomName}","${d.type}","${d.relayState ? 'ON' : 'OFF'}",${d.powerW},${d.voltageV},${d.currentA},${d.energyKWh}\n`;
     });
 
     res.setHeader('Content-Type', 'text/csv');

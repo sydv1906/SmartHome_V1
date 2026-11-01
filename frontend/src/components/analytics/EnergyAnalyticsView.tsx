@@ -18,8 +18,9 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { Download, FileText, Zap, DollarSign, Leaf, AlertTriangle, TrendingUp, Sparkles } from 'lucide-react';
+import { Download, FileText, Zap, Leaf, AlertTriangle, Sparkles, Cpu } from 'lucide-react';
 import { fetchApi } from '@/services/api';
+import { EnergyBillGenerator } from './EnergyBillGenerator';
 
 const COLORS = ['#00F0FF', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#3B82F6', '#6366F1'];
 
@@ -65,9 +66,9 @@ export const EnergyAnalyticsView: React.FC = () => {
         <div>
           <h2 className="text-lg font-bold text-white flex items-center space-x-2">
             <Zap className="w-5 h-5 text-neonCyan" />
-            <span>Energy Analytics & Tariff Insights</span>
+            <span>Energy Analytics</span>
           </h2>
-          <p className="text-xs text-gray-400">Granular consumption metrics, peak loads, and cost breakdown</p>
+          <p className="text-xs text-gray-400">Metered appliance consumption, live load, and household energy insights</p>
         </div>
 
         <div className="flex items-center space-x-2 w-full sm:w-auto">
@@ -96,6 +97,8 @@ export const EnergyAnalyticsView: React.FC = () => {
         </div>
       </div>
 
+      <EnergyBillGenerator />
+
       {/* Summary Highlight Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="glass-panel p-4 rounded-2xl border border-cyan-500/30 shadow-glowCyan">
@@ -105,18 +108,17 @@ export const EnergyAnalyticsView: React.FC = () => {
           </div>
           <p className="text-xl font-bold text-neonCyan mt-1">{data?.summary?.totalKWh} kWh</p>
           <span className="text-[10px] text-emerald-400 flex items-center space-x-1 mt-1">
-            <TrendingUp className="w-3 h-3" />
-            <span>-4.2% vs previous period</span>
+            <span>Measured from connected appliance readings</span>
           </span>
         </div>
 
         <div className="glass-panel p-4 rounded-2xl border border-amber-500/30">
           <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
-            <span>Total Cost</span>
-            <DollarSign className="w-4 h-4 text-neonAmber" />
+            <span>Connected Appliances</span>
+            <Cpu className="w-4 h-4 text-neonAmber" />
           </div>
-          <p className="text-xl font-bold text-neonAmber mt-1">${data?.summary?.totalCost}</p>
-          <span className="text-[10px] text-gray-400 mt-1 block">Tariff: $0.15 / kWh</span>
+          <p className="text-xl font-bold text-neonAmber mt-1">{data?.summary?.deviceCount ?? 0}</p>
+          <span className="text-[10px] text-gray-400 mt-1 block">Appliances in this home</span>
         </div>
 
         <div className="glass-panel p-4 rounded-2xl border border-rose-500/30">
@@ -124,9 +126,9 @@ export const EnergyAnalyticsView: React.FC = () => {
             <span>Estimated Energy Wastage</span>
             <AlertTriangle className="w-4 h-4 text-rose-400" />
           </div>
-          <p className="text-xl font-bold text-rose-400 mt-1">${data?.summary?.estimatedWastageCost}</p>
+          <p className="text-xl font-bold text-rose-400 mt-1">{data?.summary?.estimatedWastageKWh} kWh</p>
           <span className="text-[10px] text-rose-300/80 mt-1 block">
-            {data?.summary?.estimatedWastageKWh} kWh idle vampire drain
+            Estimated idle-load energy per month
           </span>
         </div>
 
@@ -245,7 +247,6 @@ export const EnergyAnalyticsView: React.FC = () => {
                   <th className="py-2.5 px-3">Category</th>
                   <th className="py-2.5 px-3">Live Power</th>
                   <th className="py-2.5 px-3">Energy (kWh)</th>
-                  <th className="py-2.5 px-3">Est. Cost</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800/60">
@@ -256,7 +257,6 @@ export const EnergyAnalyticsView: React.FC = () => {
                     <td className="py-2.5 px-3 text-gray-400">{dev.type}</td>
                     <td className="py-2.5 px-3 font-mono text-cyan-300">{dev.powerW} W</td>
                     <td className="py-2.5 px-3 font-bold text-emerald-300">{dev.energyKWh} kWh</td>
-                    <td className="py-2.5 px-3 font-bold text-amber-300">${dev.cost}</td>
                   </tr>
                 ))}
               </tbody>

@@ -100,17 +100,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onOpe
       </div>
 
       {/* Footer System Status Card */}
-      <div className="p-3 rounded-xl bg-gray-900/60 border border-gray-800 space-y-2">
+      <div className="p-3 rounded-xl bg-gray-900/60 border border-gray-800">
         <div className="flex items-center justify-between text-[11px] text-gray-400 font-medium">
           <span>HiveMQ Broker</span>
           <span className="text-emerald-400 flex items-center space-x-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
             <span>Connected</span>
           </span>
-        </div>
-        <div className="flex items-center justify-between text-[11px] text-gray-400 font-medium">
-          <span>Active Tariff Rate</span>
-          <span className="text-cyan-300">$0.15 / kWh</span>
         </div>
       </div>
     </aside>

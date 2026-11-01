@@ -2,11 +2,24 @@ import { Response } from 'express';
 import Device from '../models/Device';
 import Room from '../models/Room';
 import Home from '../models/Home';
+import Telemetry from '../models/Telemetry';
+import AutomationRule from '../models/AutomationRule';
+import Schedule from '../models/Schedule';
+import Notification from '../models/Notification';
 import { AuthRequest } from '../middleware/auth';
 import { IAIEnergyRecommendation } from '@smarthome/shared';
 import { getIO } from '../config/socket';
 import { publishRelayCommand } from '../services/mqttService';
-import { AssistantTurn, interpretAssistantRequest } from '../services/aiAssistantService';
+import {
+  AssistantDeviceContext,
+  AssistantHomeContext,
+  AssistantTurn,
+  interpretAssistantRequest,
+} from '../services/aiAssistantService';
+
+const isExplicitRelayCommand = (message: string): boolean =>
+  /^(?:(?:please|hey)\s+)*(?:(?:can|could|would)\s+you\s+)?(?:(?:please)\s+)*(?:turn|switch|power)\s+(?:(?:on|off)\s+(?:the\s+)?[\w].+|(?:the\s+)?[\w].+\s+(?:on|off))$/i
+    .test(message.trim().replace(/[?.!]+$/, ''));
 
 export const postAssistantMessage = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -32,14 +45,143 @@ export const postAssistantMessage = async (req: AuthRequest, res: Response): Pro
     }
 
     const devices = await Device.find({ homeId }).populate('roomId', 'name');
-    const deviceContext = devices.map((device) => ({
+    const deviceIds = devices.map((device) => device._id);
+    const telemetrySince = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [rooms, rules, schedules, recentAlerts, telemetrySummaries] = await Promise.all([
+      Room.find({ homeId }).select('name type status deviceCount totalPowerW totalEnergyKWh').lean(),
+      AutomationRule.find({ homeId }).sort({ updatedAt: -1 }).limit(50).lean(),
+      Schedule.find({ homeId })
+        .populate('deviceId', 'name type')
+        .sort({ updatedAt: -1 })
+        .limit(50)
+        .lean(),
+      Notification.find({ homeId })
+        .select('title message type severity createdAt')
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean(),
+      deviceIds.length
+        ? Telemetry.aggregate([
+            { $match: { deviceId: { $in: deviceIds }, timestamp: { $gte: telemetrySince } } },
+            { $sort: { deviceId: 1, timestamp: 1 } },
+            {
+              $group: {
+                _id: '$deviceId',
+                sampleCount: { $sum: 1 },
+                averagePowerW: { $avg: '$powerW' },
+                peakPowerW: { $max: '$powerW' },
+                firstEnergyKWh: { $first: '$energyKWh' },
+                lastEnergyKWh: { $last: '$energyKWh' },
+                observedFrom: { $first: '$timestamp' },
+                latestTimestamp: { $last: '$timestamp' },
+              },
+            },
+          ])
+        : Promise.resolve([]),
+    ]);
+
+    const telemetryByDevice = new Map(
+      telemetrySummaries.map((summary: any) => [
+        summary._id.toString(),
+        {
+          sampleCount: summary.sampleCount,
+          averagePowerW: Number(summary.averagePowerW.toFixed(1)),
+          peakPowerW: Number(summary.peakPowerW.toFixed(1)),
+          energyDeltaKWh: summary.sampleCount > 1 && summary.lastEnergyKWh >= summary.firstEnergyKWh
+            ? Number((summary.lastEnergyKWh - summary.firstEnergyKWh).toFixed(3))
+            : null,
+          observedFrom: summary.observedFrom?.toISOString() || null,
+          latestTimestamp: summary.latestTimestamp?.toISOString() || null,
+        },
+      ])
+    );
+    const deviceContext: AssistantDeviceContext[] = devices.map((device) => ({
       name: device.name,
       type: device.type,
       room: (device.roomId as any)?.name || 'Unknown room',
       relayState: device.relayState,
       onlineStatus: device.onlineStatus,
       powerW: device.powerW,
+      powerRatingW: device.powerRatingW,
+      voltageV: device.voltageV,
+      currentA: device.currentA,
+      energyKWh: device.energyKWh,
+      powerFactor: device.powerFactor,
+      frequencyHz: device.frequencyHz,
+      meterConnected: device.meterConnected,
+      temperatureC: typeof device.temperatureC === 'number' ? device.temperatureC : null,
+      signalStrengthRssi: device.signalStrengthRssi,
+      firmwareVersion: device.firmwareVersion,
+      lastSeen: device.lastSeen?.toISOString() || null,
+      recentTelemetry: telemetryByDevice.get(device._id.toString()) || null,
     }));
+    const homeContext: AssistantHomeContext = {
+      home: {
+        name: home.name,
+        currency: home.currency,
+        tariffPerKWh: home.tariffPerKWh,
+        timezone: home.timezone,
+        currentMode: home.currentMode,
+      },
+      rooms: rooms.map((room) => ({
+        name: room.name,
+        type: room.type,
+        status: room.status,
+        deviceCount: room.deviceCount,
+        totalPowerW: room.totalPowerW,
+        totalEnergyKWh: room.totalEnergyKWh,
+      })),
+      automations: rules.map((rule) => {
+        const conditionDevice = rule.condition.deviceId
+          ? devices.find((device) => device._id.toString() === rule.condition.deviceId?.toString())
+          : null;
+        const conditionRoom = rule.condition.roomId
+          ? rooms.find((room) => room._id.toString() === rule.condition.roomId?.toString())
+          : null;
+        const targetDevice = rule.action.targetDeviceId
+          ? devices.find((device) => device._id.toString() === rule.action.targetDeviceId?.toString())
+          : null;
+        const conditionParts = [rule.condition.type.replace(/_/g, ' ')];
+        if (typeof rule.condition.thresholdValue === 'number') {
+          conditionParts.push(`threshold ${rule.condition.thresholdValue}`);
+        }
+        if (rule.condition.durationMinutes) {
+          conditionParts.push(`duration ${rule.condition.durationMinutes} minutes`);
+        }
+        if (rule.condition.cronSchedule) {
+          conditionParts.push(`schedule ${rule.condition.cronSchedule}`);
+        }
+        if (conditionDevice) conditionParts.push(`device ${conditionDevice.name}`);
+        if (conditionRoom) conditionParts.push(`room ${conditionRoom.name}`);
+        const actionParts = [rule.action.type.replace(/_/g, ' ')];
+        if (targetDevice) actionParts.push(`device ${targetDevice.name}`);
+        if (rule.action.mode) actionParts.push(rule.action.mode);
+
+        return {
+          name: rule.name,
+          enabled: rule.enabled,
+          condition: conditionParts.join(', '),
+          action: actionParts.join(', '),
+          lastTriggered: rule.lastTriggered?.toISOString() || null,
+        };
+      }),
+      schedules: schedules.map((schedule: any) => ({
+        name: schedule.name,
+        device: schedule.deviceId?.name || 'Unknown device',
+        time: schedule.time,
+        days: schedule.days,
+        action: schedule.action,
+        enabled: schedule.enabled,
+      })),
+      recentAlerts: recentAlerts.map((alert) => ({
+        title: alert.title,
+        message: alert.message,
+        type: alert.type,
+        severity: alert.severity,
+        createdAt: alert.createdAt.toISOString(),
+      })),
+      dataAsOf: new Date().toISOString(),
+    };
     const history: AssistantTurn[] = Array.isArray(req.body?.history)
       ? req.body.history
           .filter((turn: any) =>
@@ -51,9 +193,16 @@ export const postAssistantMessage = async (req: AuthRequest, res: Response): Pro
           .map((turn: AssistantTurn) => ({ role: turn.role, content: turn.content.slice(0, 1000) }))
       : [];
 
-    const intent = await interpretAssistantRequest(message, history, deviceContext);
-    if (intent.kind === 'reply') {
+    const intent = await interpretAssistantRequest(message, history, deviceContext, homeContext);
+    if (intent.kind !== 'relay') {
       res.status(200).json({ success: true, reply: intent.reply });
+      return;
+    }
+    if (!isExplicitRelayCommand(message)) {
+      res.status(200).json({
+        success: true,
+        reply: 'I can control a device when you give me a direct command, such as “turn the living room fan off.”',
+      });
       return;
     }
 
@@ -64,38 +213,6 @@ export const postAssistantMessage = async (req: AuthRequest, res: Response): Pro
         (!intent.roomName || roomName.toLowerCase() === intent.roomName.toLowerCase())
       );
     });
-
-    if (intent.kind === 'status') {
-      if (intent.deviceName || intent.roomName) {
-        if (matchingDevices.length === 0) {
-          res.status(200).json({ success: true, reply: 'I could not find that device or room in your active home.' });
-          return;
-        }
-        if (intent.deviceName && matchingDevices.length > 1) {
-          res.status(200).json({ success: true, reply: 'I found more than one device with that name. Which room do you mean?' });
-          return;
-        }
-
-        const runningPowerW = matchingDevices.reduce((total, device) => total + (device.relayState ? device.powerW : 0), 0);
-        const summary = matchingDevices
-          .map((device) => `${device.name} in ${(device.roomId as any)?.name || 'Unknown room'} is ${device.onlineStatus ? (device.relayState ? 'on' : 'off') : 'offline'} and drawing ${Math.round(device.powerW)} watts`)
-          .join('. ');
-        res.status(200).json({
-          success: true,
-          reply: `${summary}. Combined active power is ${Math.round(runningPowerW)} watts.`,
-        });
-        return;
-      }
-
-      const runningDevices = devices.filter((device) => device.relayState);
-      const totalPowerW = runningDevices.reduce((total, device) => total + device.powerW, 0);
-      const onlineCount = devices.filter((device) => device.onlineStatus).length;
-      res.status(200).json({
-        success: true,
-        reply: `Your home has ${devices.length} devices, ${onlineCount} online, and ${runningDevices.length} switched on. Current active power is ${Math.round(totalPowerW)} watts.`,
-      });
-      return;
-    }
 
     if (!intent.deviceName || !intent.state) {
       res.status(200).json({
